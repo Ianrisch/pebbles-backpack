@@ -1,4 +1,4 @@
-package tech.sethi.pebbles.backpack
+package tech.sethi.pebbles.backpack.inventory
 
 import net.minecraft.inventory.SimpleInventory
 
@@ -9,4 +9,5 @@ class BackpackInventory(size: Int) : SimpleInventory(size) {
     fun getRows(): Int {
         return this.size() / 9
     }
+
 }

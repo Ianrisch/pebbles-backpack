@@ -1,6 +1,7 @@
-package tech.sethi.pebbles.backpack
+package tech.sethi.pebbles.backpack.migration
 
 import net.minecraft.item.ItemStack
+import tech.sethi.pebbles.backpack.inventory.BackpackInventory
 
 data class BackpackData(val id: Int, val size: Int, val items: List<ItemStack>, var playerName: String? = null)
 

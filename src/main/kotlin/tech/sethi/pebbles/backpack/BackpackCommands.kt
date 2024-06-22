@@ -4,23 +4,25 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonParser
 import com.mojang.brigadier.CommandDispatcher
-import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
 import net.luckperms.api.LuckPerms
 import net.luckperms.api.LuckPermsProvider
 import net.minecraft.command.CommandSource
+import net.minecraft.command.argument.EntityArgumentType
+import net.minecraft.command.argument.UuidArgumentType
 import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.item.ItemStack
-import net.minecraft.item.Items
-import net.minecraft.nbt.NbtHelper
-import net.minecraft.screen.SimpleNamedScreenHandlerFactory
-import net.minecraft.server.MinecraftServer
 import net.minecraft.server.command.CommandManager
 import net.minecraft.server.command.ServerCommandSource
 import net.minecraft.text.Text
-import net.minecraft.util.Formatting
+import net.minecraft.util.collection.DefaultedList
+import tech.sethi.pebbles.backpack.api.Backpack
+import tech.sethi.pebbles.backpack.api.BackpackTier
+import tech.sethi.pebbles.backpack.inventory.BackpackInventory
+import tech.sethi.pebbles.backpack.inventory.InventoryHandler
+import tech.sethi.pebbles.backpack.storage.BackpackCache
+import tech.sethi.pebbles.backpack.storage.adapters.ItemStackTypeAdapter
 import java.io.File
-import net.minecraft.util.WorldSavePath
 
 
 object BackpackCommands {
@@ -34,232 +36,93 @@ object BackpackCommands {
             )!!.cachedData.permissionData.checkPermission("pebbles.admin").asBoolean()) || source.entity == null
         }
 
-        val createBackpackCommand = CommandManager.literal("bp").then(CommandManager.literal("create")
-            .then(CommandManager.argument("tier", StringArgumentType.word()).suggests { _, builder ->
-                builder.suggest("leather").suggest("copper").suggest("iron").suggest("gold").suggest("diamond")
-                    .suggest("netherite").buildFuture()
-            }.then(CommandManager.argument("playerName", StringArgumentType.string()).suggests { context, builder ->
-                CommandSource.suggestMatching(
-                    context.source.server.playerManager.playerList.map { it.name.string }, builder
-                )
-            }.executes { ctx ->
-                val nextId = (backpacks.keys.maxOrNull() ?: 0) + 1
-                val playerName = StringArgumentType.getString(ctx, "playerName")
-                val playerEntity = ctx.source.server.playerManager.getPlayer(playerName)
+        val createBackpackCommand = CommandManager.literal("bp")
+            .then(
+                CommandManager.literal("create")
+                    .then(
+                        CommandManager.argument("tier", StringArgumentType.word())
+                            .suggests { _, builder ->
+                                CommandSource.suggestMatching(BackpackTier.values().map { it.name }, builder)
+                            }
+                            .then(
+                                CommandManager.argument("target", EntityArgumentType.players())
+                                    .executes { ctx ->
+                                        val target = EntityArgumentType.getPlayer(ctx, "target")
+                                        val tier = BackpackTier.valueOf(StringArgumentType.getString(ctx, "tier"))
 
-                if (playerEntity == null) {
-                    ctx.source.sendError(Text.literal("Player '$playerName' not found."))
-                    return@executes 0
-                }
+                                        val backpack = Backpack(tier = tier, items = DefaultedList.ofSize(tier.size, ItemStack.EMPTY))
+                                        BackpackCache[backpack.uuid] = backpack
+                                        BackpackCache.saveAsync(backpack.uuid)
 
-                val tier = StringArgumentType.getString(ctx, "tier")
-                val size = when (tier) {
-                    "leather" -> 9
-                    "copper" -> 18
-                    "iron" -> 27
-                    "gold" -> 36
-                    "diamond" -> 45
-                    "netherite" -> 54
-                    else -> 9
-                }
-                val skullStack = ItemStack(Items.PLAYER_HEAD)
+                                        target.giveItemStack(backpack.toItemStack())
 
-                val backpackNbt = NbtHelper.fromNbtProviderString(getBackpackNbt(tier))
-                skullStack.nbt = backpackNbt
+                                        ctx.source.sendFeedback(
+                                            { Text.literal("Backpack created with uuid ${backpack.uuid} for ${target.name}") }, false
+                                        )
 
-                val skullMeta = skullStack.orCreateNbt
-                skullMeta.putInt("BackpackID", nextId)
-
-                playerEntity.giveItemStack(skullStack)
-
-                val backpackInventory = BackpackInventory(size)
-                backpackInventory.playerName = playerName // Set the playerName property
-                backpacks[nextId] = backpackInventory
-
-                ctx.source.sendFeedback(
-                    { Text.literal("Backpack created with ID: $nextId for $playerName") }, false
-                )
-
-                val backpacksFile = getBackpacksFile(ctx.source.server)
-                val player = ctx.source.server.playerManager.getPlayer(playerName)
-                if (player != null) {
-                    saveBackpacksData(backpacksFile)
-                }
-
-                return@executes 1
-            })
-            )
-        )
-
-        val getBackpackCommand = CommandManager.literal("bp").then(
-            CommandManager.literal("get")
-                .then(CommandManager.argument("id", IntegerArgumentType.integer(1)).suggests { _, builder ->
-                    CommandSource.suggestMatching(backpacks.keys.map { it.toString() }, builder)
-                }.executes { ctx ->
-                    val id = IntegerArgumentType.getInteger(ctx, "id")
-                    val playerEntity = ctx.source.player as? PlayerEntity
-
-                    //get all backpack IDs
-                    val backpackIds = backpacks.keys
-                    if (!backpackIds.contains(id)) {
-                        ctx.source.sendError(Text.literal("Backpack with ID $id not found."))
-                        return@executes 0
-                    }
-
-                    if (playerEntity == null) {
-                        ctx.source.sendError(Text.literal("Invalid player"))
-                        return@executes 0
-                    }
-
-                    val tier = when (backpacks[id]?.getRows()) {
-                        1 -> "leather"
-                        2 -> "copper"
-                        3 -> "iron"
-                        4 -> "gold"
-                        5 -> "diamond"
-                        6 -> "netherite"
-                        else -> "leather"
-                    }
-                    val size = when (tier) {
-                        "leather" -> 9
-                        "copper" -> 18
-                        "iron" -> 27
-                        "gold" -> 36
-                        "diamond" -> 45
-                        "netherite" -> 54
-                        else -> 9
-                    }
-
-                    val skullStack = ItemStack(Items.PLAYER_HEAD)
-
-                    val backpackNbt = NbtHelper.fromNbtProviderString(getBackpackNbt(tier))
-                    skullStack.nbt = backpackNbt
-
-                    val skullMeta = skullStack.orCreateNbt
-                    skullMeta.putInt("BackpackID", id)
-
-                    playerEntity.giveItemStack(skullStack)
-
-
-                    ctx.source.sendFeedback(
-                        { Text.literal("Backpack retrieved with: $id") }, false
+                                        return@executes 1
+                                    })
                     )
+            )
 
-                    return@executes 1
-                })
-        )
+        val getBackpackCommand = CommandManager.literal("bp")
+            .then(
+                CommandManager.literal("get")
+                    .then(
+                        CommandManager.argument("uuid", UuidArgumentType.uuid())
+                            .suggests { _, builder ->
+                                CommandSource.suggestMatching(BackpackCache.keys.map { it.toString() }, builder)
+                            }
+                            .executes { ctx ->
+                                val uuid = UuidArgumentType.getUuid(ctx, "uuid")
+                                val player = ctx.source.playerOrThrow
+
+                                val backpack = BackpackCache[uuid]
+
+                                if (backpack == null) {
+                                    ctx.source.sendError(Text.literal("Backpack with uuid $uuid not found."))
+                                    return@executes 0
+                                }
+
+                                player.giveItemStack(backpack.toItemStack())
+                                ctx.source.sendFeedback(
+                                    { Text.literal("Backpack retrieved with uuid $uuid") }, false
+                                )
+
+                                return@executes 1
+                            })
+            )
 
 
 
         padminCommand.then(getBackpackCommand)
 
 
-        val openBackpackCommand = CommandManager.literal("bp").then(CommandManager.argument(
-            "id", IntegerArgumentType.integer(1)
-        ).executes { ctx ->
-            val id = IntegerArgumentType.getInteger(ctx, "id")
-            if (openBackpack(ctx.source.player!!, id)) {
-                return@executes 1
-            } else {
-                ctx.source.sendError(Text.literal("Backpack with ID $id not found."))
-                return@executes 0
-            }
-        })
+        val openBackpackCommand = CommandManager.literal("bp")
+            .then(
+                CommandManager.argument("uuid", UuidArgumentType.uuid())
+                    .suggests { _, builder ->
+                        CommandSource.suggestMatching(BackpackCache.keys.map { it.toString() }, builder)
+                    }
+                    .executes { ctx ->
+                        val uuid = UuidArgumentType.getUuid(ctx, "uuid")
+                        val player = ctx.source.playerOrThrow
+                        val backpack = BackpackCache[uuid]
+
+                        if (backpack == null) {
+                            ctx.source.sendError(Text.literal("Backpack with uuid $uuid not found."))
+                            return@executes 0
+                        }
+
+                        InventoryHandler.openBackpack(player, backpack)
+                        return@executes 1
+                    })
 
         padminCommand.then(createBackpackCommand)
         padminCommand.then(openBackpackCommand)
 
         dispatcher.register(padminCommand)
     }
-
-    private fun getBackpackTier(rowSize: Int): String {
-        return when (rowSize) {
-            1 -> "leather"
-            2 -> "copper"
-            3 -> "iron"
-            4 -> "gold"
-            5 -> "diamond"
-            6 -> "netherite"
-            else -> "leather"
-        }
-    }
-
-
-    fun getBackpacksFile(server: MinecraftServer): File {
-        val worldDir = server.getSavePath(WorldSavePath.ROOT).toFile()
-        return File(worldDir, "pebbles_backpacks.json")
-    }
-
-    private val gson = GsonBuilder().registerTypeAdapter(ItemStack::class.java, ItemStackTypeAdapter()).create()
-
-    fun saveBackpacksData(file: File) {
-        val backpacksData = backpacks.map { (id, backpackInventory) ->
-            backpackInventory.toData(id)
-        }
-
-        file.writer().use { writer ->
-            gson.toJson(backpacksData, writer)
-        }
-    }
-
-
-    fun loadBackpacksData(file: File): Map<Int, BackpackInventory> {
-        val backpackInventories = mutableMapOf<Int, BackpackInventory>()
-
-        file.reader().use { reader ->
-            val jsonElement = JsonParser.parseReader(reader)
-            var backpackDataArray = JsonArray()
-            if (!jsonElement.isJsonNull) {
-                backpackDataArray = jsonElement.asJsonArray
-            }
-
-            for (backpackDataJson in backpackDataArray) {
-                val backpackData = gson.fromJson(backpackDataJson, BackpackData::class.java)
-                val backpackInventory = BackpackInventory(backpackData.size)
-
-                // Load the ItemStacks into the BackpackInventory
-                backpackData.items.forEachIndexed { index, itemStack ->
-                    backpackInventory.setStack(index, itemStack)
-                }
-
-                backpackInventories[backpackData.id] = backpackInventory
-            }
-        }
-
-        // Debug print
-        println("Loaded backpacks data: $backpackInventories")
-
-        return backpackInventories
-    }
-
-    fun openBackpack(player: PlayerEntity, id: Int): Boolean {
-        val backpack = backpacks[id]
-        val backpackTier = backpack?.getRows()
-        // get names based on tier
-        val backpackName = when (backpackTier) {
-            1 -> "Leather"
-            2 -> "Copper"
-            3 -> "Iron"
-            4 -> "Gold"
-            5 -> "Diamond"
-            6 -> "Netherite"
-            else -> "Leather"
-        }
-        return if (backpack != null) {
-            val rows = backpack.getRows()
-            player.openHandledScreen(
-                SimpleNamedScreenHandlerFactory(
-                    { syncId, inv, _ ->
-                        BackpackScreenHandler(syncId, inv, backpack, rows)
-                    }, Text.literal("$backpackName Backpack").formatted(Formatting.DARK_RED)
-                )
-            )
-            true
-        } else {
-            false
-        }
-    }
-
 
     private fun isLuckPermsPresent(): Boolean {
         return try {

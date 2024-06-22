@@ -1,4 +1,4 @@
-package tech.sethi.pebbles.backpack
+package tech.sethi.pebbles.backpack.inventory
 
 import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.entity.player.PlayerInventory
@@ -9,19 +9,18 @@ import net.minecraft.screen.ScreenHandler
 import net.minecraft.screen.ScreenHandlerType
 import net.minecraft.screen.slot.Slot
 import net.minecraft.screen.slot.SlotActionType
-import net.minecraft.server.MinecraftServer
-import tech.sethi.pebbles.backpack.BackpackCommands.getBackpacksFile
-import tech.sethi.pebbles.backpack.BackpackCommands.saveBackpacksData
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
-
+import tech.sethi.pebbles.backpack.debounce.debounce
+import tech.sethi.pebbles.backpack.migration.LegacyMigration
+import tech.sethi.pebbles.backpack.storage.BackpackCache
+import java.util.*
+import kotlin.time.Duration.Companion.seconds
 
 class BackpackScreenHandler(
     syncId: Int,
+    rows: Int,
+    private val backpackId: UUID,
     private val playerInventory: PlayerInventory,
-    private val backpackInventory: BackpackInventory,
-    rows: Int
+    private val backpackInventory: BackpackInventory
 ) : ScreenHandler(getScreenHandlerTypeForRows(rows), syncId) {
 
     companion object {
@@ -35,12 +34,12 @@ class BackpackScreenHandler(
                 else -> ScreenHandlerType.GENERIC_3X3
             }
         }
-
-        private val saveExecutor = Executors.newScheduledThreadPool(1)
-
     }
 
-    private val saveScheduled = AtomicBoolean(false)
+    private val save = debounce(5.seconds) {
+        println("Saving")
+        BackpackCache.saveAsync(backpackId)
+    }
 
     init {
         // Backpack slots
@@ -85,11 +84,8 @@ class BackpackScreenHandler(
             }
         }
 
-        if (player != null) {
-            if (!player.world.isClient) {
-                val backpacksFile = getBackpacksFile(player.server as MinecraftServer)
-                saveBackpacksData(backpacksFile)
-            }
+        if (player != null && !player.world.isClient) {
+            save()
         }
 
         return itemStack
@@ -107,7 +103,7 @@ class BackpackScreenHandler(
     }
 
     private fun isBackpack(itemStack: ItemStack): Boolean {
-        return itemStack.item == Items.PLAYER_HEAD && itemStack.nbt?.contains("BackpackID") == true
+        return itemStack.item == Items.PLAYER_HEAD && LegacyMigration.isBackpack(itemStack)
     }
 
     override fun onContentChanged(inventory: Inventory?) {
@@ -115,20 +111,13 @@ class BackpackScreenHandler(
         this.backpackInventory.markDirty()
         super.onContentChanged(inventory)
         if (!player.world.isClient) {
-            if (!saveScheduled.get()) {
-                saveScheduled.set(true)
-                saveExecutor.schedule({
-                    saveBackpackData(player)
-                    saveScheduled.set(false)
-                }, 20, TimeUnit.SECONDS)
-            }
+            save()
         }
     }
 
     override fun onClosed(player: PlayerEntity) {
-        saveScheduled.set(false)
         super.onClosed(player)
-        saveBackpackData(player)
+        save()
     }
 
 
@@ -146,22 +135,8 @@ class BackpackScreenHandler(
 
         if (player != null) {
             if (!player.world.isClient) {
-                if (!saveScheduled.get()) {
-                    saveScheduled.set(true)
-                    saveExecutor.schedule({
-                        saveBackpackData(player)
-                        saveScheduled.set(false)
-                    }, 20, TimeUnit.SECONDS)
-                }
+                save()
             }
-        }
-    }
-
-
-    private fun saveBackpackData(player: PlayerEntity) {
-        if (!player.world.isClient) {
-            val backpacksFile = getBackpacksFile(player.server as MinecraftServer)
-            saveBackpacksData(backpacksFile)
         }
     }
 }
