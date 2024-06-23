@@ -11,8 +11,7 @@ import kotlin.time.Duration
 val scheduler: ScheduledExecutorService = Executors.newScheduledThreadPool(1)
 val futures = ConcurrentHashMap<UUID, Future<*>>()
 
-fun debounce(time: Duration, fn: () -> Unit): () -> Unit {
-    val key = UUID.randomUUID()
+fun debounce(time: Duration, key: UUID = UUID.randomUUID(), fn: () -> Unit): () -> Unit {
     return {
         futures[key]?.cancel(false)
         val future = scheduler.schedule({ fn() }, time.inWholeSeconds, TimeUnit.SECONDS)

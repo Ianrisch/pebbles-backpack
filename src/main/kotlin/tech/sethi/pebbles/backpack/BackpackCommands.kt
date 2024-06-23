@@ -1,8 +1,5 @@
 package tech.sethi.pebbles.backpack
 
-import com.google.gson.GsonBuilder
-import com.google.gson.JsonArray
-import com.google.gson.JsonParser
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType
 import net.luckperms.api.LuckPerms
@@ -15,19 +12,16 @@ import net.minecraft.item.ItemStack
 import net.minecraft.server.command.CommandManager
 import net.minecraft.server.command.ServerCommandSource
 import net.minecraft.text.Text
+import net.minecraft.util.Hand
 import net.minecraft.util.collection.DefaultedList
 import tech.sethi.pebbles.backpack.api.Backpack
 import tech.sethi.pebbles.backpack.api.BackpackTier
-import tech.sethi.pebbles.backpack.inventory.BackpackInventory
 import tech.sethi.pebbles.backpack.inventory.InventoryHandler
+import tech.sethi.pebbles.backpack.migration.LegacyMigration
 import tech.sethi.pebbles.backpack.storage.BackpackCache
-import tech.sethi.pebbles.backpack.storage.adapters.ItemStackTypeAdapter
-import java.io.File
 
 
 object BackpackCommands {
-    val backpacks = mutableMapOf<Int, BackpackInventory>()
-
     fun register(dispatcher: CommandDispatcher<ServerCommandSource>) {
         val padminCommand = CommandManager.literal("padmin").requires { source ->
             val player = source.player as? PlayerEntity
@@ -93,35 +87,57 @@ object BackpackCommands {
                             })
             )
 
-
-
-        padminCommand.then(getBackpackCommand)
-
-
         val openBackpackCommand = CommandManager.literal("bp")
             .then(
-                CommandManager.argument("uuid", UuidArgumentType.uuid())
-                    .suggests { _, builder ->
-                        CommandSource.suggestMatching(BackpackCache.keys.map { it.toString() }, builder)
-                    }
-                    .executes { ctx ->
-                        val uuid = UuidArgumentType.getUuid(ctx, "uuid")
-                        val player = ctx.source.playerOrThrow
-                        val backpack = BackpackCache[uuid]
+                CommandManager.literal("open")
+                    .then(
+                        CommandManager.argument("uuid", UuidArgumentType.uuid())
+                            .suggests { _, builder ->
+                                CommandSource.suggestMatching(BackpackCache.keys.map { it.toString() }, builder)
+                            }
+                            .executes { ctx ->
+                                val uuid = UuidArgumentType.getUuid(ctx, "uuid")
+                                val player = ctx.source.playerOrThrow
+                                val backpack = BackpackCache[uuid]
 
-                        if (backpack == null) {
-                            ctx.source.sendError(Text.literal("Backpack with uuid $uuid not found."))
-                            return@executes 0
-                        }
+                                if (backpack == null) {
+                                    ctx.source.sendError(Text.literal("Backpack with uuid $uuid not found."))
+                                    return@executes 0
+                                }
 
-                        InventoryHandler.openBackpack(player, backpack)
-                        return@executes 1
-                    })
+                                InventoryHandler.openBackpack(player, backpack)
+                                return@executes 1
+                            }
+                    ))
 
+        padminCommand.then(getBackpackCommand)
         padminCommand.then(createBackpackCommand)
         padminCommand.then(openBackpackCommand)
 
         dispatcher.register(padminCommand)
+
+        val getBackpackIdCommand = CommandManager.literal("backpack")
+            .then(
+                CommandManager.literal("id")
+                    .executes { ctx ->
+                        val player = ctx.source.playerOrThrow
+                        val itemInHand = player.getStackInHand(Hand.MAIN_HAND)
+
+                        if (LegacyMigration.isBackpack(itemInHand)) {
+                            LegacyMigration.migrateItemStack(itemInHand)
+                            if (itemInHand.orCreateNbt.containsUuid("BackpackUUID")) {
+                                val backpackUUID = itemInHand.orCreateNbt.getUuid("BackpackUUID")
+                                ctx.source.sendFeedback({ Text.literal(backpackUUID.toString()) }, false)
+                                return@executes 1
+                            }
+                        }
+
+                        ctx.source.sendError(Text.literal("You are not currently holding a backpack."))
+                        return@executes 0
+                    }
+            )
+
+        dispatcher.register(getBackpackIdCommand)
     }
 
     private fun isLuckPermsPresent(): Boolean {
@@ -138,20 +154,6 @@ object BackpackCommands {
             LuckPermsProvider.get()
         } catch (e: IllegalStateException) {
             null
-        }
-    }
-
-
-    private fun getBackpackNbt(tier: String): String {
-        return when (tier) {
-            "leather" -> "{display:{Name:\"{\\\"text\\\":\\\"Leather Backpack\\\"}\"},SkullOwner:{Id:[I;-1865738760,-355187999,-1172757398,374987400],Properties:{textures:[{Value:\"eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNDBiMWI1MzY3NDkxODM5MWEwN2E5ZDAwNTgyYzA1OGY5MjgwYmM1MjZhNzE2Yzc5NmVlNWVhYjRiZTEwYTc2MCJ9fX0=\"}]}}}"
-            "copper" -> "{display:{Name:\"{\\\"text\\\":\\\"Copper Backpack\\\"}\"},SkullOwner:{Id:[I;1162937850,1879723887,-1267568232,-499049394],Properties:{textures:[{Value:\"eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMWU1ODNjYjc3MTU4MWQzYjI3YjIzZjYxN2M3YjhhNDNkY2Q3MjIwNDQ3ZmY5NWZmMTk2MDQxNGQyMzUwYmRiOSJ9fX0=\"}]}}}"
-            "iron" -> "{display:{Name:\"{\\\"text\\\":\\\"Iron Backpack\\\"}\"},SkullOwner:{Id:[I;1804696949,1735083680,-1716683629,-1934495154],Properties:{textures:[{Value:\"eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZGRhZjhlZGMzMmFmYjQ2MWFlZTA3MTMwNTgwMjMxMDFmOTI0ZTJhN2VmYTg4M2RhZTcyZDVkNTdkNGMwNTNkNyJ9fX0=\"}]}}}"
-            "gold" -> "{display:{Name:\"{\\\"text\\\":\\\"Gold Backpack\\\"}\"},SkullOwner:{Id:[I;1780200479,157369315,-1565115920,-961015289],Properties:{textures:[{Value:\"eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvY2Y4NzUyNWFkODRlZmQxNjgwNmEyNmNhMDE5ODRiMjgwZTViYTY0MDM1MDViNmY2Yzk4MDNjMjQ2NDJhYmZjNyJ9fX0=\"}]}}}"
-            "diamond" -> "{display:{Name:\"{\\\"text\\\":\\\"Diamond Backpack\\\"}\"},SkullOwner:{Id:[I;-104595003,-2052699552,-1909633784,2079891327],Properties:{textures:[{Value:\"eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMTBkMWIwNzMyYmY3YTcwZGU0ZGMwMTU1OWNjNWM5ODExMDY4ZWY3YjYwOTUwMTAzODI3MDlmOTQwOTM5MjdmNiJ9fX0=\"}]}}}"
-            "netherite" -> "{display:{Name:\"{\\\"text\\\":\\\"Netherite Backpack\\\"}\"},SkullOwner:{Id:[I;-814574281,-1699395768,-1993160043,-1564669232],Properties:{textures:[{Value:\"eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvODM1ZDdjYzA5ZmZmYmNhM2UxYzAwZDQyMWFmYWE0MzJjZjcxZmNiMDk1NTVmNTQ1MjNlNTIyMGQxYWYwZjk3ZCJ9fX0=\"}]}}}"
-            "gucci" -> "{display:{Name:\"{\\\"text\\\":\\\"Gucci Backpack\\\"}\"},SkullOwner:{Id:[I;945208130,1552895596,-2057951394,2057894273],Properties:{textures:[{Value:\"eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvZTIwOGY1ODk3ZjEyZTVmY2IyZThiNDM4MWY1NDQ1YTc3MTFlODQ3MjFlYzRhN2ZjMTAxZDViNzQwYjg2ZjhmYSJ9fX0=\"}]}}}"
-            else -> "{display:{Name:\"{\\\"text\\\":\\\"Bag\\\"}\"},SkullOwner:{Id:[I;-1980288287,-640760459,800809409,-1213206538],Properties:{textures:[{Value:\"eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMzViMTE2ZGM3NjlkNmQ1NzI2ZjEyYTI0ZjNmMTg2ZjgzOTQyNzMyMWU4MmY0MTM4Nzc1YTRjNDAzNjdhNDkifX19\"}]}}}"
         }
     }
 }

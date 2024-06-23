@@ -36,7 +36,7 @@ class BackpackScreenHandler(
         }
     }
 
-    private val save = debounce(5.seconds) {
+    private val save = debounce(time = 5.seconds, key = backpackId) {
         println("Saving")
         BackpackCache.saveAsync(backpackId)
     }
