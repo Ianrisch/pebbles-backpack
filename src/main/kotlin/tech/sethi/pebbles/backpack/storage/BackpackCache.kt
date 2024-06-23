@@ -1,6 +1,7 @@
 package tech.sethi.pebbles.backpack.storage
 
 import com.google.gson.GsonBuilder
+import tech.sethi.pebbles.backpack.PebblesBackpackInitializer
 import tech.sethi.pebbles.backpack.api.Backpack
 import tech.sethi.pebbles.backpack.storage.adapters.BackpackTypeAdapter
 import java.io.File
@@ -37,7 +38,6 @@ object BackpackCache {
         cache.clear()
 
         this.rootFolder.walkTopDown().forEach { file ->
-            println(file)
             if (!file.name.endsWith(".json")) return@forEach
 
             file.reader().use { reader ->
@@ -45,6 +45,7 @@ object BackpackCache {
                     val backpack = gson.fromJson(reader.readText(), Backpack::class.java)
                     if (backpack != null) cache[backpack.uuid] = backpack
                 } catch (e: Exception) {
+                    PebblesBackpackInitializer.LOGGER.warn("Could not load backpack file ${file.name}")
                     e.printStackTrace()
                 }
             }
@@ -61,8 +62,14 @@ object BackpackCache {
         val backpack = cache[uuid] ?: return
 
         val file = File(rootFolder, "$uuid.json")
-        file.writer().use { writer ->
-            gson.toJson(backpack, writer)
+        try {
+            file.writer().use { writer ->
+                gson.toJson(backpack, writer)
+            }
+        }
+        catch (e: Exception) {
+            PebblesBackpackInitializer.LOGGER.warn("Could not save backpack file ${file.name}")
+            e.printStackTrace()
         }
     }
 

@@ -14,13 +14,16 @@ import tech.sethi.pebbles.backpack.inventory.InventoryHandler
 import tech.sethi.pebbles.backpack.migration.LegacyMigration
 import tech.sethi.pebbles.backpack.storage.BackpackCache
 import java.io.File
-import java.util.concurrent.CompletableFuture
 
 class PebblesBackpackInitializer : ModInitializer {
-    private val logger = LoggerFactory.getLogger("pebbles-backpack")
+
+    companion object {
+        val MODID = "pebbles-backpack"
+        val LOGGER = LoggerFactory.getLogger(MODID)
+    }
 
     override fun onInitialize() {
-        logger.info("Registering Pebble's Backpack Commands!")
+        LOGGER.info("Registering Pebble's Backpack Commands!")
 
         ServerLifecycleEvents.SERVER_STARTED.register { server ->
             BackpackCommands.register(server.commandManager.dispatcher)
@@ -45,7 +48,7 @@ class PebblesBackpackInitializer : ModInitializer {
         })
 
 
-        logger.info("Pebble's Backpack loaded!")
+        LOGGER.info("Pebble's Backpack loaded!")
     }
 
     private fun handleBackpackInteraction(player: PlayerEntity, world: World, hand: Hand): Boolean {
