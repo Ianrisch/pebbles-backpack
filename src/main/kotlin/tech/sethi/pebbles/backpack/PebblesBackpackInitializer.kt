@@ -4,10 +4,12 @@ import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.event.player.UseBlockCallback
 import net.fabricmc.fabric.api.event.player.UseItemCallback
+import net.minecraft.block.Blocks
 import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.registry.Registries
 import net.minecraft.server.MinecraftServer
 import net.minecraft.util.*
+import net.minecraft.util.hit.BlockHitResult
 import net.minecraft.world.World
 import org.slf4j.LoggerFactory
 import tech.sethi.pebbles.backpack.inventory.InventoryHandler
@@ -35,11 +37,16 @@ class PebblesBackpackInitializer : ModInitializer {
         })
 
 
-        UseBlockCallback.EVENT.register(UseBlockCallback { player, world, hand, _ ->
+        UseBlockCallback.EVENT.register(UseBlockCallback { player, world, hand, hit ->
+            println(shouldOpenBackpack(world, hit))
+            if (!shouldOpenBackpack(world, hit)) {
+                // We fail on sneak to prevent player from placing backpack
+                return@UseBlockCallback if (player.isSneaking) ActionResult.FAIL else ActionResult.PASS
+            }
+
             val result = handleBackpackInteraction(player, world, hand)
             return@UseBlockCallback if (result) ActionResult.SUCCESS else ActionResult.PASS
         })
-
 
         UseItemCallback.EVENT.register(UseItemCallback { player, world, hand ->
             handleBackpackInteraction(player, world, hand)
@@ -49,6 +56,36 @@ class PebblesBackpackInitializer : ModInitializer {
 
 
         LOGGER.info("Pebble's Backpack loaded!")
+    }
+
+    private fun shouldOpenBackpack(world: World, hitResult: BlockHitResult): Boolean {
+        val blacklist = listOf(
+            Blocks.CHEST,
+            Blocks.ENDER_CHEST,
+            Blocks.FURNACE,
+            Blocks.CRAFTING_TABLE,
+            Blocks.ANVIL,
+            Blocks.CHIPPED_ANVIL,
+            Blocks.DAMAGED_ANVIL,
+            Blocks.BARREL,
+            Blocks.BEACON,
+            Blocks.BLAST_FURNACE,
+            Blocks.BREWING_STAND,
+            Blocks.COMMAND_BLOCK,
+            Blocks.DISPENSER,
+            Blocks.DROPPER,
+            Blocks.HOPPER,
+            Blocks.GRINDSTONE,
+            Blocks.LECTERN,
+            Blocks.LOOM,
+            Blocks.TRAPPED_CHEST,
+            Blocks.SMITHING_TABLE,
+            Blocks.SMOKER,
+            Blocks.STONE,
+            Blocks.ENCHANTING_TABLE
+        )
+        val block = world.getBlockState(hitResult.blockPos).block
+        return block !in blacklist
     }
 
     private fun handleBackpackInteraction(player: PlayerEntity, world: World, hand: Hand): Boolean {
