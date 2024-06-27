@@ -38,10 +38,9 @@ class PebblesBackpackInitializer : ModInitializer {
 
 
         UseBlockCallback.EVENT.register(UseBlockCallback { player, world, hand, hit ->
-            println(shouldOpenBackpack(world, hit))
-            if (!shouldOpenBackpack(world, hit)) {
+            if (!player.isSneaking && !shouldOpenBackpack(world, hit)) {
                 // We fail on sneak to prevent player from placing backpack
-                return@UseBlockCallback if (player.isSneaking) ActionResult.FAIL else ActionResult.PASS
+                return@UseBlockCallback ActionResult.PASS
             }
 
             val result = handleBackpackInteraction(player, world, hand)
@@ -81,7 +80,6 @@ class PebblesBackpackInitializer : ModInitializer {
             Blocks.TRAPPED_CHEST,
             Blocks.SMITHING_TABLE,
             Blocks.SMOKER,
-            Blocks.STONE,
             Blocks.ENCHANTING_TABLE
         )
         val block = world.getBlockState(hitResult.blockPos).block
