@@ -52,10 +52,15 @@ class BasicBackpackScreenHandler(
     }
 
     override fun onSlotClick(slotIndex: Int, button: Int, actionType: SlotActionType?, player: PlayerEntity) {
+        if (actionType == SlotActionType.SWAP) {
+            val stack = player.inventory.getStack(button)
+            if (isBackpack(stack)) return
+        }
         if (slotIndex >= 0) {
             val stack = this.slots[slotIndex].stack
             if (isBackpack(stack)) return
         }
+
         super.onSlotClick(slotIndex, button, actionType, player)
         if (!player.world.isClient) {
             save()
