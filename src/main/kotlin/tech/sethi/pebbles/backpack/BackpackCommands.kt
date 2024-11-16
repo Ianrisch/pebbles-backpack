@@ -31,85 +31,74 @@ object BackpackCommands {
             )!!.cachedData.permissionData.checkPermission("pebbles.admin").asBoolean()) || source.entity == null
         }
 
-        val createBackpackCommand = CommandManager.literal("bp")
-            .then(
-                CommandManager.literal("create")
-                    .then(
-                        CommandManager.argument("tier", StringArgumentType.word())
-                            .suggests { _, builder ->
-                                CommandSource.suggestMatching(BackpackTier.values().map { it.name }, builder)
-                            }
-                            .then(
-                                CommandManager.argument("target", EntityArgumentType.players())
-                                    .executes { ctx ->
-                                        val target = EntityArgumentType.getPlayer(ctx, "target")
-                                        val tier = BackpackTier.valueOf(StringArgumentType.getString(ctx, "tier"))
+        val createBackpackCommand = CommandManager.literal("bp").then(
+            CommandManager.literal("create").then(
+                CommandManager.argument("tier", StringArgumentType.word()).suggests { _, builder ->
+                    CommandSource.suggestMatching(BackpackTier.values().map { it.name }, builder)
+                }.then(
+                    CommandManager.argument("target", EntityArgumentType.players()).executes { ctx ->
+                        val target = EntityArgumentType.getPlayer(ctx, "target")
+                        val tier = BackpackTier.valueOf(StringArgumentType.getString(ctx, "tier"))
 
-                                        val backpack = Backpack(tier = tier, items = DefaultedList.ofSize(tier.size, ItemStack.EMPTY))
-                                        BackpackCache[backpack.uuid] = backpack
-                                        BackpackCache.saveAsync(backpack.uuid)
+                        val backpack = Backpack(
+                            tier = tier, items = DefaultedList.ofSize(tier.size, ItemStack.EMPTY)
+                        )
+                        BackpackCache[backpack.uuid] = backpack
+                        BackpackCache.saveAsync(backpack.uuid)
 
-                                        target.giveItemStack(backpack.toItemStack())
+                        target.giveItemStack(backpack.toItemStack())
 
-                                        ctx.source.sendFeedback(
-                                            { Text.literal("Backpack created with uuid ${backpack.uuid} for ${target.name}") }, false
-                                        )
+                        ctx.source.sendFeedback(
+                            { Text.literal("Backpack created with uuid ${backpack.uuid} for ${target.name}") }, false
+                        )
 
-                                        return@executes 1
-                                    })
+                        return@executes 1
+                    })
+            )
+        )
+
+        val getBackpackCommand = CommandManager.literal("bp").then(
+            CommandManager.literal("get")
+                .then(CommandManager.argument("uuid", UuidArgumentType.uuid()).suggests { _, builder ->
+                    CommandSource.suggestMatching(BackpackCache.keys.map { it.toString() }, builder)
+                }.executes { ctx ->
+                    val uuid = UuidArgumentType.getUuid(ctx, "uuid")
+                    val player = ctx.source.playerOrThrow
+
+                    val backpack = BackpackCache[uuid]
+
+                    if (backpack == null) {
+                        ctx.source.sendError(Text.literal("Backpack with uuid $uuid not found."))
+                        return@executes 0
+                    }
+
+                    player.giveItemStack(backpack.toItemStack())
+                    ctx.source.sendFeedback(
+                        { Text.literal("Backpack retrieved with uuid $uuid") }, false
                     )
-            )
 
-        val getBackpackCommand = CommandManager.literal("bp")
-            .then(
-                CommandManager.literal("get")
-                    .then(
-                        CommandManager.argument("uuid", UuidArgumentType.uuid())
-                            .suggests { _, builder ->
-                                CommandSource.suggestMatching(BackpackCache.keys.map { it.toString() }, builder)
-                            }
-                            .executes { ctx ->
-                                val uuid = UuidArgumentType.getUuid(ctx, "uuid")
-                                val player = ctx.source.playerOrThrow
+                    return@executes 1
+                })
+        )
 
-                                val backpack = BackpackCache[uuid]
+        val openBackpackCommand = CommandManager.literal("bp").then(
+            CommandManager.literal("open")
+                .then(CommandManager.argument("uuid", UuidArgumentType.uuid()).suggests { _, builder ->
+                    CommandSource.suggestMatching(BackpackCache.keys.map { it.toString() }, builder)
+                }.executes { ctx ->
+                    val uuid = UuidArgumentType.getUuid(ctx, "uuid")
+                    val player = ctx.source.playerOrThrow
+                    val backpack = BackpackCache[uuid]
 
-                                if (backpack == null) {
-                                    ctx.source.sendError(Text.literal("Backpack with uuid $uuid not found."))
-                                    return@executes 0
-                                }
+                    if (backpack == null) {
+                        ctx.source.sendError(Text.literal("Backpack with uuid $uuid not found."))
+                        return@executes 0
+                    }
 
-                                player.giveItemStack(backpack.toItemStack())
-                                ctx.source.sendFeedback(
-                                    { Text.literal("Backpack retrieved with uuid $uuid") }, false
-                                )
-
-                                return@executes 1
-                            })
-            )
-
-        val openBackpackCommand = CommandManager.literal("bp")
-            .then(
-                CommandManager.literal("open")
-                    .then(
-                        CommandManager.argument("uuid", UuidArgumentType.uuid())
-                            .suggests { _, builder ->
-                                CommandSource.suggestMatching(BackpackCache.keys.map { it.toString() }, builder)
-                            }
-                            .executes { ctx ->
-                                val uuid = UuidArgumentType.getUuid(ctx, "uuid")
-                                val player = ctx.source.playerOrThrow
-                                val backpack = BackpackCache[uuid]
-
-                                if (backpack == null) {
-                                    ctx.source.sendError(Text.literal("Backpack with uuid $uuid not found."))
-                                    return@executes 0
-                                }
-
-                                InventoryHandler.openBackpack(player, backpack)
-                                return@executes 1
-                            }
-                    ))
+                    InventoryHandler.openBackpack(player, backpack)
+                    return@executes 1
+                })
+        )
 
         padminCommand.then(getBackpackCommand)
         padminCommand.then(createBackpackCommand)
@@ -117,26 +106,23 @@ object BackpackCommands {
 
         dispatcher.register(padminCommand)
 
-        val getBackpackIdCommand = CommandManager.literal("backpack")
-            .then(
-                CommandManager.literal("id")
-                    .executes { ctx ->
-                        val player = ctx.source.playerOrThrow
-                        val itemInHand = player.getStackInHand(Hand.MAIN_HAND)
+        val getBackpackIdCommand = CommandManager.literal("backpack").then(
+            CommandManager.literal("id").executes { ctx ->
+                val player = ctx.source.playerOrThrow
+                val itemInHand = player.getStackInHand(Hand.MAIN_HAND)
 
-                        if (LegacyMigration.isBackpack(itemInHand)) {
-                            LegacyMigration.migrateItemStack(itemInHand)
-                            if (itemInHand.contains(ModComponents.BackpackUUID)) {
-                                val backpackUUID = itemInHand.get(ModComponents.BackpackUUID)
-                                ctx.source.sendFeedback({ Text.literal(backpackUUID.toString()) }, false)
-                                return@executes 1
-                            }
-                        }
-
-                        ctx.source.sendError(Text.literal("You are not currently holding a backpack."))
-                        return@executes 0
+                if (LegacyMigration.isBackpack(itemInHand)) {
+                    LegacyMigration.migrateItemStack(itemInHand)
+                    if (itemInHand.contains(ModComponents.BackpackUUID)) {
+                        val backpackUUID = itemInHand.get(ModComponents.BackpackUUID)
+                        ctx.source.sendFeedback({ Text.literal(backpackUUID.toString()) }, false)
+                        return@executes 1
                     }
-            )
+                }
+
+                ctx.source.sendError(Text.literal("You are not currently holding a backpack."))
+                return@executes 0
+            })
 
         dispatcher.register(getBackpackIdCommand)
     }
