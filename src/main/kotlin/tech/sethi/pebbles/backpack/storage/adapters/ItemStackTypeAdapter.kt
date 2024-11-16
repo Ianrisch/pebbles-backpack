@@ -1,9 +1,9 @@
 package tech.sethi.pebbles.backpack.storage.adapters
 
 import com.google.gson.*
-import kotlinx.serialization.json.Json
+import com.mojang.serialization.JsonOps
+import net.minecraft.component.ComponentMap
 import net.minecraft.item.ItemStack
-import net.minecraft.nbt.StringNbtReader
 import net.minecraft.registry.Registries
 import net.minecraft.util.Identifier
 import java.lang.reflect.Type
@@ -16,8 +16,8 @@ class ItemStackTypeAdapter : JsonSerializer<ItemStack>, JsonDeserializer<ItemSta
         jsonObject.addProperty("item", Registries.ITEM.getId(src.item).toString())
         jsonObject.addProperty("count", src.count)
 
-        if (src.hasNbt()) {
-            jsonObject.addProperty("nbt", src.nbt.toString())
+        if (!src.components.isEmpty) {
+            jsonObject.add("nbt", ComponentMap.CODEC.encodeStart(JsonOps.INSTANCE, src.components).orThrow)
         }
 
         return jsonObject
@@ -28,7 +28,7 @@ class ItemStackTypeAdapter : JsonSerializer<ItemStack>, JsonDeserializer<ItemSta
         if (json is JsonNull) return null
 
         val jsonObject = json.asJsonObject
-        val item = Registries.ITEM.get(Identifier(jsonObject["item"].asString))
+        val item = Registries.ITEM.get(Identifier.of(jsonObject["item"].asString))
         val count = jsonObject["count"].asInt
 
         val stack = ItemStack(item, count)

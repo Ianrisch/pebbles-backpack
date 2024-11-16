@@ -3,43 +3,49 @@ package tech.sethi.pebbles.backpack.migration
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonParser
+import net.minecraft.component.DataComponentTypes
+import net.minecraft.component.type.NbtComponent
 import net.minecraft.item.ItemStack
 import net.minecraft.server.MinecraftServer
 import net.minecraft.util.WorldSavePath
 import net.minecraft.util.collection.DefaultedList
 import tech.sethi.pebbles.backpack.api.Backpack
 import tech.sethi.pebbles.backpack.api.BackpackTier
+import tech.sethi.pebbles.backpack.compenents.ModComponents
 import tech.sethi.pebbles.backpack.storage.BackpackCache
 import tech.sethi.pebbles.backpack.storage.adapters.ItemStackTypeAdapter
 import java.io.File
-import java.util.UUID
+import java.util.*
 
 object LegacyMigration {
 
-    private val legacyGson = GsonBuilder()
-        .registerTypeAdapter(ItemStack::class.java, ItemStackTypeAdapter())
-        .create()
+    private val legacyGson = GsonBuilder().registerTypeAdapter(ItemStack::class.java, ItemStackTypeAdapter()).create()
 
     fun isBackpack(maybeBackpack: ItemStack): Boolean {
         if (isLegacyBackpack(maybeBackpack)) return true
-
-        if (maybeBackpack.nbt == null) return false
-        return maybeBackpack.nbt!!.get("BackpackUUID") != null
+        return maybeBackpack.contains(ModComponents.BackpackUUID)
     }
 
     fun migrateItemStack(backpack: ItemStack) {
         if (!isLegacyBackpack(backpack)) return
 
-        val nbt = backpack.orCreateNbt
-        val legacyId = nbt.getInt("BackpackID")
-        val newId = UUID(0L, legacyId.toLong())
-        nbt.remove("BackpackID")
-        nbt.putUuid("BackpackUUID", newId)
+        val nbt = backpack.get(DataComponentTypes.CUSTOM_DATA)?.nbt!!
+        val legacyLegacyId = nbt.getInt("BackpackID")
+        var uuid = nbt.getUuid("BackpackUUID")
+        if (legacyLegacyId != 0) {
+            uuid = UUID(0L, legacyLegacyId.toLong())
+            nbt.remove("BackpackID")
+        }
+        nbt.remove("BackpackUUID")
+
+        backpack.set(ModComponents.BackpackUUID, uuid)
+        backpack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt))
     }
 
     private fun isLegacyBackpack(backpack: ItemStack): Boolean {
-        if (backpack.nbt == null) return false
-        return backpack.nbt!!.get("BackpackID") != null
+        if (backpack.components.isEmpty) return false
+        val oldData = backpack.get(DataComponentTypes.CUSTOM_DATA) ?: return false
+        return oldData.contains("BackpackID") || oldData.contains("BackpackUUID")
     }
 
     fun migrateLegacyBackpacks(server: MinecraftServer) {
@@ -85,7 +91,7 @@ object LegacyMigration {
     }
 
     private fun getBackpackTierFromSize(size: Int): BackpackTier {
-        return BackpackTier.values().firstOrNull { it.size == size } ?: BackpackTier.Copper
+        return BackpackTier.entries.firstOrNull { it.size == size } ?: BackpackTier.Copper
     }
 
 }

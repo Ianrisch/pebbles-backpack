@@ -12,6 +12,7 @@ import net.minecraft.util.*
 import net.minecraft.util.hit.BlockHitResult
 import net.minecraft.world.World
 import org.slf4j.LoggerFactory
+import tech.sethi.pebbles.backpack.compenents.ModComponents
 import tech.sethi.pebbles.backpack.inventory.InventoryHandler
 import tech.sethi.pebbles.backpack.migration.LegacyMigration
 import tech.sethi.pebbles.backpack.storage.BackpackCache
@@ -53,6 +54,8 @@ class PebblesBackpackInitializer : ModInitializer {
             return@UseItemCallback TypedActionResult.pass(stack)
         })
 
+        ModComponents.initialize()
+
 
         LOGGER.info("Pebble's Backpack loaded!")
     }
@@ -90,17 +93,16 @@ class PebblesBackpackInitializer : ModInitializer {
         if (world.isClient) return false
 
         val stack = player.getStackInHand(hand)
-        val skullItem = Registries.ITEM.get(Identifier("minecraft:player_head"))
+        val skullItem = Registries.ITEM.get(Identifier.of("minecraft", "player_head"))
         if (stack.item != skullItem) return false
 
         LegacyMigration.migrateItemStack(stack)
-        if (!stack.orCreateNbt.containsUuid("BackpackUUID")) return false
-        val backpackUUID = stack.orCreateNbt.getUuid("BackpackUUID")
+        if (!stack.contains(ModComponents.BackpackUUID)) return false
+        val backpackUUID = stack.get(ModComponents.BackpackUUID)!!
 
-        val backpack = BackpackCache[backpackUUID]
-        if (backpack != null) {
-            InventoryHandler.openBackpack(player, backpack)
-        }
+        val backpack = BackpackCache[backpackUUID] ?: return false
+
+        InventoryHandler.openBackpack(player, backpack)
 
         return true
     }
