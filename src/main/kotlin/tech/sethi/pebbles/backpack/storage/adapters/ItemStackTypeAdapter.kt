@@ -34,9 +34,15 @@ class ItemStackTypeAdapter : JsonSerializer<ItemStack>, JsonDeserializer<ItemSta
         val stack = ItemStack(item, count)
 
         if (jsonObject.has("nbt")) {
-            val nbtString = jsonObject["nbt"].asString
-            val nbt = StringNbtReader.parse(nbtString)
-            stack.nbt = nbt
+            try {
+                stack.applyComponentsFrom(
+                    ComponentMap.CODEC.parse(
+                        JsonOps.INSTANCE, jsonObject["nbt"]
+                    ).orThrow
+                )
+            } catch (_: Exception) {
+
+            }
         }
 
         return stack
