@@ -12,6 +12,7 @@ import net.minecraft.util.*
 import net.minecraft.util.hit.BlockHitResult
 import net.minecraft.world.World
 import org.slf4j.LoggerFactory
+import tech.sethi.pebbles.backpack.api.Backpack.Companion.isBackpack
 import tech.sethi.pebbles.backpack.compenents.ModComponents
 import tech.sethi.pebbles.backpack.inventory.InventoryHandler
 import tech.sethi.pebbles.backpack.items.BackpackItems
@@ -95,8 +96,7 @@ class PebblesBackpackInitializer : ModInitializer {
         if (world.isClient) return false
 
         val stack = player.getStackInHand(hand)
-        val skullItem = Registries.ITEM.get(Identifier.of("minecraft", "player_head"))
-        if (stack.item != skullItem) return false
+        if (!isBackpack(stack)) return false
 
         LegacyMigration.migrateItemStack(stack)
         if (!stack.contains(ModComponents.BackpackUUID)) return false

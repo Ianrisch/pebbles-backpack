@@ -21,10 +21,6 @@ object LegacyMigration {
 
     private val legacyGson = GsonBuilder().registerTypeAdapter(ItemStack::class.java, ItemStackTypeAdapter()).create()
 
-    fun isBackpack(maybeBackpack: ItemStack): Boolean {
-        if (isLegacyBackpack(maybeBackpack)) return true
-        return maybeBackpack.contains(ModComponents.BackpackUUID)
-    }
 
     fun migrateItemStack(backpack: ItemStack) {
         if (!isLegacyBackpack(backpack)) return

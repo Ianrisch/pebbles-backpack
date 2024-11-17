@@ -15,6 +15,7 @@ import net.minecraft.text.Text
 import net.minecraft.util.Hand
 import net.minecraft.util.collection.DefaultedList
 import tech.sethi.pebbles.backpack.api.Backpack
+import tech.sethi.pebbles.backpack.api.Backpack.Companion.isBackpack
 import tech.sethi.pebbles.backpack.api.BackpackTier
 import tech.sethi.pebbles.backpack.compenents.ModComponents
 import tech.sethi.pebbles.backpack.inventory.InventoryHandler
@@ -111,8 +112,8 @@ object BackpackCommands {
                 val player = ctx.source.playerOrThrow
                 val itemInHand = player.getStackInHand(Hand.MAIN_HAND)
 
-                if (LegacyMigration.isBackpack(itemInHand)) {
-                    LegacyMigration.migrateItemStack(itemInHand)
+                if (isBackpack(itemInHand)) {
+                    LegacyMigration.migrateItemStack(itemInHand, player)
                     if (itemInHand.contains(ModComponents.BackpackUUID)) {
                         val backpackUUID = itemInHand.get(ModComponents.BackpackUUID)
                         ctx.source.sendFeedback({ Text.literal(backpackUUID.toString()) }, false)

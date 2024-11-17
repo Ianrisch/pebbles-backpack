@@ -4,13 +4,12 @@ import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.entity.player.PlayerInventory
 import net.minecraft.inventory.Inventory
 import net.minecraft.item.ItemStack
-import net.minecraft.item.Items
 import net.minecraft.screen.GenericContainerScreenHandler
 import net.minecraft.screen.ScreenHandlerType
 import net.minecraft.screen.slot.SlotActionType
+import tech.sethi.pebbles.backpack.api.Backpack.Companion.isBackpack
 import tech.sethi.pebbles.backpack.api.BackpackTier
 import tech.sethi.pebbles.backpack.debounce.debounce
-import tech.sethi.pebbles.backpack.migration.LegacyMigration
 import tech.sethi.pebbles.backpack.storage.BackpackCache
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
@@ -67,9 +66,7 @@ class BasicBackpackScreenHandler(
         }
     }
 
-    private fun isBackpack(itemStack: ItemStack): Boolean {
-        return itemStack.item == Items.PLAYER_HEAD && LegacyMigration.isBackpack(itemStack)
-    }
+
 
     override fun onContentChanged(inventory: Inventory?) {
         super.onContentChanged(inventory)

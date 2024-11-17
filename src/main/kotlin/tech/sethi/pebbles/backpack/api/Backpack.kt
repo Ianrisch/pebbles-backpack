@@ -10,6 +10,9 @@ import net.minecraft.item.Items
 import net.minecraft.text.Text
 import net.minecraft.util.collection.DefaultedList
 import tech.sethi.pebbles.backpack.compenents.ModComponents
+import tech.sethi.pebbles.backpack.items.BackpackItems
+import tech.sethi.pebbles.backpack.items.BackpackPolymerItem
+import tech.sethi.pebbles.backpack.migration.LegacyMigration
 import java.util.*
 
 class Backpack(val uuid: UUID = UUID.randomUUID(), val tier: BackpackTier, items: DefaultedList<ItemStack>) {
@@ -24,7 +27,7 @@ class Backpack(val uuid: UUID = UUID.randomUUID(), val tier: BackpackTier, items
     }
 
     fun toItemStack(): ItemStack {
-        val item = ItemStack(Items.PLAYER_HEAD)
+        val item = ItemStack(BackpackItems.BACKPACK)
 
         val profileComponent = ProfileComponent(
             GameProfile(UUID.nameUUIDFromBytes(tier.skullOwner.toByteArray()), "")
@@ -39,6 +42,13 @@ class Backpack(val uuid: UUID = UUID.randomUUID(), val tier: BackpackTier, items
         item.set(DataComponentTypes.PROFILE, profileComponent)
 
         return item
+    }
+
+    companion object {
+        fun isBackpack(itemStack: ItemStack): Boolean {
+            if (itemStack.item != Items.PLAYER_HEAD && itemStack.item != BackpackItems.BACKPACK) return false
+            return LegacyMigration.isLegacyBackpack(itemStack) || itemStack.contains(ModComponents.BackpackUUID)
+        }
     }
 
 }
