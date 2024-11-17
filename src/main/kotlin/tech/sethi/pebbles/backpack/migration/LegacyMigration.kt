@@ -5,13 +5,14 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonParser
 import net.minecraft.component.DataComponentTypes
 import net.minecraft.component.type.NbtComponent
+import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.item.ItemStack
 import net.minecraft.server.MinecraftServer
+import net.minecraft.text.Text
 import net.minecraft.util.WorldSavePath
 import net.minecraft.util.collection.DefaultedList
 import tech.sethi.pebbles.backpack.api.Backpack
 import tech.sethi.pebbles.backpack.api.BackpackTier
-import tech.sethi.pebbles.backpack.compenents.ModComponents
 import tech.sethi.pebbles.backpack.storage.BackpackCache
 import tech.sethi.pebbles.backpack.storage.adapters.ItemStackTypeAdapter
 import java.io.File
@@ -21,24 +22,34 @@ object LegacyMigration {
 
     private val legacyGson = GsonBuilder().registerTypeAdapter(ItemStack::class.java, ItemStackTypeAdapter()).create()
 
-
-    fun migrateItemStack(backpack: ItemStack) {
+    fun migrateItemStack(backpack: ItemStack, player: PlayerEntity) {
         if (!isLegacyBackpack(backpack)) return
 
         val nbt = backpack.get(DataComponentTypes.CUSTOM_DATA)?.nbt!!
         val legacyLegacyId = nbt.getInt("BackpackID")
-        var uuid = nbt.getUuid("BackpackUUID")
+        val uuid: UUID
         if (legacyLegacyId != 0) {
             uuid = UUID(0L, legacyLegacyId.toLong())
             nbt.remove("BackpackID")
+        } else {
+            uuid = nbt.getUuid("BackpackUUID")
+            nbt.remove("BackpackUUID")
         }
-        nbt.remove("BackpackUUID")
 
-        backpack.set(ModComponents.BackpackUUID, uuid)
         backpack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt))
+
+        val newBackpack = BackpackCache[uuid]?.toItemStack();
+        if (newBackpack == null) {
+            player.sendMessage(Text.literal("Backpack with uuid $uuid not found."))
+            backpack.count = 0
+        } else {
+            newBackpack.count = backpack.count
+            player.inventory.setStack(player.inventory.getSlotWithStack(backpack), newBackpack)
+        }
+
     }
 
-    private fun isLegacyBackpack(backpack: ItemStack): Boolean {
+    fun isLegacyBackpack(backpack: ItemStack): Boolean {
         if (backpack.components.isEmpty) return false
         val oldData = backpack.get(DataComponentTypes.CUSTOM_DATA) ?: return false
         return oldData.contains("BackpackID") || oldData.contains("BackpackUUID")

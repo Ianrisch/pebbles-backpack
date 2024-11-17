@@ -6,7 +6,6 @@ import net.fabricmc.fabric.api.event.player.UseBlockCallback
 import net.fabricmc.fabric.api.event.player.UseItemCallback
 import net.minecraft.block.Blocks
 import net.minecraft.entity.player.PlayerEntity
-import net.minecraft.registry.Registries
 import net.minecraft.server.MinecraftServer
 import net.minecraft.util.*
 import net.minecraft.util.hit.BlockHitResult
@@ -98,7 +97,7 @@ class PebblesBackpackInitializer : ModInitializer {
         val stack = player.getStackInHand(hand)
         if (!isBackpack(stack)) return false
 
-        LegacyMigration.migrateItemStack(stack)
+        LegacyMigration.migrateItemStack(stack, player)
         if (!stack.contains(ModComponents.BackpackUUID)) return false
         val backpackUUID = stack.get(ModComponents.BackpackUUID)!!
 
