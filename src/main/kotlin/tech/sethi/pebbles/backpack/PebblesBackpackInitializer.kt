@@ -14,6 +14,7 @@ import net.minecraft.world.World
 import org.slf4j.LoggerFactory
 import tech.sethi.pebbles.backpack.compenents.ModComponents
 import tech.sethi.pebbles.backpack.inventory.InventoryHandler
+import tech.sethi.pebbles.backpack.items.BackpackItems
 import tech.sethi.pebbles.backpack.migration.LegacyMigration
 import tech.sethi.pebbles.backpack.storage.BackpackCache
 import java.io.File
@@ -55,6 +56,7 @@ class PebblesBackpackInitializer : ModInitializer {
         })
 
         ModComponents.initialize()
+        BackpackItems.initialize()
 
 
         LOGGER.info("Pebble's Backpack loaded!")
