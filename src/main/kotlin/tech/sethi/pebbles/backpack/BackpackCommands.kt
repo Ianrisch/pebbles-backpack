@@ -34,7 +34,7 @@ object BackpackCommands {
         val createBackpackCommand = CommandManager.literal("bp").then(
             CommandManager.literal("create").then(
                 CommandManager.argument("tier", StringArgumentType.word()).suggests { _, builder ->
-                    CommandSource.suggestMatching(BackpackTier.values().map { it.name }, builder)
+                    CommandSource.suggestMatching(BackpackTier.entries.map { it.name }, builder)
                 }.then(
                     CommandManager.argument("target", EntityArgumentType.players()).executes { ctx ->
                         val target = EntityArgumentType.getPlayer(ctx, "target")
@@ -49,7 +49,7 @@ object BackpackCommands {
                         target.giveItemStack(backpack.toItemStack())
 
                         ctx.source.sendFeedback(
-                            { Text.literal("Backpack created with uuid ${backpack.uuid} for ${target.name}") }, false
+                            { Text.literal("Backpack created with uuid ${backpack.uuid} for ${target.name.literalString}") }, false
                         )
 
                         return@executes 1
