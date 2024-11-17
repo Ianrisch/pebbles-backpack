@@ -18,16 +18,18 @@ object ModComponents {
     )
 
     private fun <T> register(path: String, componentType: ComponentType<T>): ComponentType<T> {
-        return Registry.register(
+        val registeredComponentType = Registry.register(
             Registries.DATA_COMPONENT_TYPE, Identifier.of(PebblesBackpackInitializer.MODID, path), componentType
         )
+        PolymerComponent.registerDataComponent(registeredComponentType)
+        return registeredComponentType
     }
 
     fun initialize() {
         LOGGER.info("Registering {} components", PebblesBackpackInitializer.MODID)
         // Technically this method can stay empty, but some developers like to notify
         // the console, that certain parts of the mod have been successfully initialized
-        PolymerComponent.registerDataComponent(BackpackUUID)
+
 
     }
 }
